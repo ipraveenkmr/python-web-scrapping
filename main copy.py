@@ -179,3 +179,50 @@ async def get_saved_data():
         return {"data": data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+    
+
+@app.get("/get-stock-symbols")
+async def get_stock_symbols():
+    """
+    Fetches all stock symbols from the MongoDB 'stocks' collection 
+    and returns them as a comma-separated string.
+    """
+    try:
+        # Fetch all documents from the collection
+        stocks = stock_collection.find({}, {"_id": 0, "Symbol": 1})  # Only fetch 'Symbol' field
+        
+        # Extract symbols
+        symbols = [stock["Symbol"] for stock in stocks if "Symbol" in stock]
+        
+        if not symbols:
+            raise HTTPException(status_code=404, detail="No stock symbols found.")
+        
+        # Return as comma-separated string
+        return {"symbols": ", ".join(symbols)}
+    except Exception as e:
+        return {"error": str(e)}
+    
+    
+@app.get("/get-stock-symbols-limited")
+async def get_stock_symbols():
+    """
+    Fetches stock symbols from the MongoDB 'stocks' collection,
+    returning records from 20 to 200 and returns them as a comma-separated string.
+    """
+    try:
+        # Fetch documents starting from the 20th to the 200th (using skip and limit)
+        stocks = stock_collection.find({}, {"_id": 0, "Symbol": 1}).skip(2000).limit(500)  # Skip 20 and limit to 180 records
+        
+        # Extract symbols
+        symbols = [stock["Symbol"] for stock in stocks if "Symbol" in stock]
+        
+        if not symbols:
+            raise HTTPException(status_code=404, detail="No stock symbols found.")
+        
+        # Return as comma-separated string
+        return {"symbols": ", ".join(symbols)}
+    except Exception as e:
+        return {"error": str(e)}
+
+    
