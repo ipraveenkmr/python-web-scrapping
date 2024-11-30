@@ -77,75 +77,7 @@ def parse_shareholder_table(stock_symbol: str, soup: BeautifulSoup):
         }
         rows.append(row_data)
 
-    return {"stock_symbol": stock_symbol, "shareholder_data": rows}
-
-
-# API Endpoints
-@app.post("/scrape-stocks-details")
-async def scrape_stocks_details(payload: StockList):
-    """
-    Scrapes top ratios data for a list of stock symbols.
-    """
-    stock_symbols = [
-        symbol.strip().upper() for symbol in payload.stock_symbols.split(",")
-    ]
-    results = []
-
-    for stock_symbol in stock_symbols:
-        try:
-            soup = fetch_page(f"https://www.screener.in/company/{stock_symbol}/")
-            data = parse_ul_top_ratios(stock_symbol, soup)
-            if data:
-                stock_details_collection.insert_one(data)
-                results.append(
-                    {
-                        "stock_symbol": stock_symbol,
-                        "message": "Data scraped and saved successfully.",
-                    }
-                )
-            else:
-                results.append(
-                    {"stock_symbol": stock_symbol, "message": "No top ratios found."}
-                )
-        except Exception as e:
-            results.append({"stock_symbol": stock_symbol, "error": str(e)})
-
-    return {"results": results}
-
-
-@app.post("/scrape-shareholder-data")
-async def scrape_shareholder_data(payload: StockList):
-    """
-    Scrapes shareholder data for a list of stock symbols.
-    """
-    stock_symbols = [
-        symbol.strip().upper() for symbol in payload.stock_symbols.split(",")
-    ]
-
-    async def scrape_and_save(stock_symbol):
-        try:
-            soup = fetch_page(f"https://www.screener.in/company/{stock_symbol}/")
-            data = parse_shareholder_table(stock_symbol, soup)
-            if data:
-                shareholder_collection.insert_one(data)
-                return {
-                    "stock_symbol": stock_symbol,
-                    "message": "Data scraped and saved successfully.",
-                }
-            return {
-                "stock_symbol": stock_symbol,
-                "message": "No shareholder table found.",
-            }
-        except Exception as e:
-            return {"stock_symbol": stock_symbol, "error": str(e)}
-
-    tasks = [scrape_and_save(symbol) for symbol in stock_symbols]
-    results = await asyncio.gather(*tasks)
-
-    return {"results": results}
-
-
-import asyncio
+    return {"shareholder_data": rows}
 
 
 @app.post("/scrape-all-data")
@@ -161,8 +93,11 @@ async def scrape_shareholder_data(payload: StockList):
             data = parse_shareholder_table(stock_symbol, soup)
             details_data = parse_ul_top_ratios(stock_symbol, soup)
             if data:
-                shareholder_collection.insert_one(data)
-                stock_details_collection.insert_one(details_data)
+                combined_data = {
+                    **data,
+                    **details_data,
+                }
+                stock_details_collection.insert_one(combined_data)
                 return {
                     "stock_symbol": stock_symbol,
                     "message": "Data scraped and saved successfully.",
@@ -178,9 +113,7 @@ async def scrape_shareholder_data(payload: StockList):
     for symbol in stock_symbols:
         result = await scrape_and_save(symbol)
         results.append(result)
-        await asyncio.sleep(
-            5
-        )  # Wait for 5 seconds before processing the next stock symbol
+        await asyncio.sleep(5)  # Wait for 5 seconds before processing the next stock symbol
 
     return {"results": results}
 
