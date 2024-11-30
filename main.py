@@ -10,14 +10,12 @@ from bs4 import BeautifulSoup
 MONGO_URI = "mongodb://localhost:27017"
 DATABASE_NAME = "scraping_db"
 STOCK_COLLECTION_NAME = "stocks"
-SHAREHOLDER_COLLECTION_NAME = "shareholder_data"
 STOCK_DETAILS_COLLECTION = "stock_details"
 
 # Connect to MongoDB
 client = MongoClient(MONGO_URI)
 db = client[DATABASE_NAME]
 stock_collection = db[STOCK_COLLECTION_NAME]
-shareholder_collection = db[SHAREHOLDER_COLLECTION_NAME]
 stock_details_collection = db[STOCK_DETAILS_COLLECTION]
 
 # FastAPI app
@@ -79,6 +77,122 @@ def parse_shareholder_table(stock_symbol: str, soup: BeautifulSoup):
 
     return {"shareholder_data": rows}
 
+def parse_profit_loss_table(stock_symbol: str, soup: BeautifulSoup):
+    try:
+        table = soup.find("section", id="profit-loss")
+        # table = soup.find("div", id="peers-table-placeholder")
+        if not table:
+            print(f"No table placeholder found for {stock_symbol}.")
+            return {"profit_loss": []}
+
+        # Find the table within the placeholder
+        data_table = table.find("table", class_="data-table")
+        if not data_table:
+            print(f"No data table found for {stock_symbol}.")
+            return {"profit_loss": []}
+
+        # Extract headers
+        headers = []
+        header_row = data_table.find("tr")
+        if not header_row:
+            print(f"No header row found for {stock_symbol}.")
+            return {"profit_loss": []}
+
+        for th in header_row.find_all("th"):
+            headers.append(th.get_text(strip=True))
+
+        if not headers:
+            print(f"No headers found for {stock_symbol}.")
+            return {"profit_loss": []}
+
+        # Extract rows
+        rows = []
+        tbody = data_table.find("tbody")
+        if not tbody:
+            print(f"No tbody found for {stock_symbol}.")
+            return {"profit_loss": []}
+
+        for tr in tbody.find_all("tr"):
+            cells = tr.find_all("td")
+            if len(cells) != len(headers):
+                print(f"Row mismatch for {stock_symbol}: {cells}")
+                continue
+
+            # Map headers to cell values
+            row_data = {
+                headers[idx]: cell.get_text(strip=True) 
+                for idx, cell in enumerate(cells)
+            }
+            rows.append(row_data)
+
+        if not rows:
+            print(f"No data rows found for {stock_symbol}.")
+            return {"profit_loss": []}
+
+        return {"profit_loss": rows}
+    except Exception as e:
+        print(f"Error parsing peer comparison table for {stock_symbol}: {str(e)}")
+        return {"profit_loss": []}
+
+def parse_balance_sheet_table(stock_symbol: str, soup: BeautifulSoup):
+    try:
+        table = soup.find("section", id="balance-sheet")
+        # table = soup.find("div", id="peers-table-placeholder")
+        if not table:
+            print(f"No table placeholder found for {stock_symbol}.")
+            return {"balance_sheet": []}
+
+        # Find the table within the placeholder
+        data_table = table.find("table", class_="data-table")
+        if not data_table:
+            print(f"No data table found for {stock_symbol}.")
+            return {"balance_sheet": []}
+
+        # Extract headers
+        headers = []
+        header_row = data_table.find("tr")
+        if not header_row:
+            print(f"No header row found for {stock_symbol}.")
+            return {"balance_sheet": []}
+
+        for th in header_row.find_all("th"):
+            headers.append(th.get_text(strip=True))
+
+        if not headers:
+            print(f"No headers found for {stock_symbol}.")
+            return {"balance_sheet": []}
+
+        # Extract rows
+        rows = []
+        tbody = data_table.find("tbody")
+        if not tbody:
+            print(f"No tbody found for {stock_symbol}.")
+            return {"balance_sheet": []}
+
+        for tr in tbody.find_all("tr"):
+            cells = tr.find_all("td")
+            if len(cells) != len(headers):
+                print(f"Row mismatch for {stock_symbol}: {cells}")
+                continue
+
+            # Map headers to cell values
+            row_data = {
+                headers[idx]: cell.get_text(strip=True) 
+                for idx, cell in enumerate(cells)
+            }
+            rows.append(row_data)
+
+        if not rows:
+            print(f"No data rows found for {stock_symbol}.")
+            return {"balance_sheet": []}
+
+        return {"balance_sheet": rows}
+    except Exception as e:
+        print(f"Error parsing peer comparison table for {stock_symbol}: {str(e)}")
+        return {"balance_sheet": []}
+
+
+
 
 @app.post("/scrape-all-data")
 async def scrape_shareholder_data(payload: StockList):
@@ -92,10 +206,15 @@ async def scrape_shareholder_data(payload: StockList):
             soup = fetch_page(f"https://www.screener.in/company/{stock_symbol}/")
             details_data = parse_ul_top_ratios(stock_symbol, soup)
             shareholder_data = parse_shareholder_table(stock_symbol, soup)
+            profit_loss_data = parse_profit_loss_table(stock_symbol, soup)
+            balance_sheet_data = parse_balance_sheet_table(stock_symbol, soup)
+            # if profit_loss_data:
             if details_data or shareholder_data:
                 combined_data = {
                     **details_data,
                     **shareholder_data,
+                    **profit_loss_data,
+                    **balance_sheet_data,
                 }
                 stock_details_collection.insert_one(combined_data)
                 return {
