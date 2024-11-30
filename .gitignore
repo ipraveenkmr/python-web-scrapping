@@ -1,0 +1,53 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+*.env
+
+# Python virtual environment
+env/
+.env/
+
+csv_files/
+csv_files
+
+# Logs
+*.log
+*.pot
+*.log.*
+
+# Cache
+*.cache
+*.mypy_cache/
+*.pytest_cache/
+
+# IDE settings
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# Distribution files
+dist/
+build/
+*.egg-info/
+
+# Database dumps
+*.sqlite3
+*.db
+
+# Pycharm workspace
+*.iml
