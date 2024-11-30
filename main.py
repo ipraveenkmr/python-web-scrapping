@@ -192,6 +192,121 @@ def parse_balance_sheet_table(stock_symbol: str, soup: BeautifulSoup):
         return {"balance_sheet": []}
 
 
+def parse_quaterly_result_table(stock_symbol: str, soup: BeautifulSoup):
+    try:
+        table = soup.find("section", id="quarters")
+        # table = soup.find("div", id="peers-table-placeholder")
+        if not table:
+            print(f"No table placeholder found for {stock_symbol}.")
+            return {"quarterly_result": []}
+
+        # Find the table within the placeholder
+        data_table = table.find("table", class_="data-table")
+        if not data_table:
+            print(f"No data table found for {stock_symbol}.")
+            return {"quarterly_result": []}
+
+        # Extract headers
+        headers = []
+        header_row = data_table.find("tr")
+        if not header_row:
+            print(f"No header row found for {stock_symbol}.")
+            return {"quarterly_result": []}
+
+        for th in header_row.find_all("th"):
+            headers.append(th.get_text(strip=True))
+
+        if not headers:
+            print(f"No headers found for {stock_symbol}.")
+            return {"quarterly_result": []}
+
+        # Extract rows
+        rows = []
+        tbody = data_table.find("tbody")
+        if not tbody:
+            print(f"No tbody found for {stock_symbol}.")
+            return {"quarterly_result": []}
+
+        for tr in tbody.find_all("tr"):
+            cells = tr.find_all("td")
+            if len(cells) != len(headers):
+                print(f"Row mismatch for {stock_symbol}: {cells}")
+                continue
+
+            # Map headers to cell values
+            row_data = {
+                headers[idx]: cell.get_text(strip=True) 
+                for idx, cell in enumerate(cells)
+            }
+            rows.append(row_data)
+
+        if not rows:
+            print(f"No data rows found for {stock_symbol}.")
+            return {"quarterly_result": []}
+
+        return {"quarterly_result": rows}
+    except Exception as e:
+        print(f"Error parsing peer comparison table for {stock_symbol}: {str(e)}")
+        return {"quarterly_result": []}
+    
+    
+def parse_peer_comparision_table(stock_symbol: str, soup: BeautifulSoup):
+    try:
+        table = soup.find("section", id="peers")
+        # table = soup.find("div", id="peers-table-placeholder")
+        if not table:
+            print(f"No table placeholder found for {stock_symbol}.")
+            return {"peer_comparision": []}
+
+        # Find the table within the placeholder
+        data_table = table.find("table", class_="data-table")
+        if not data_table:
+            print(f"No data table found for {stock_symbol}.")
+            return {"peer_comparision": []}
+
+        # Extract headers
+        headers = []
+        header_row = data_table.find("tr")
+        if not header_row:
+            print(f"No header row found for {stock_symbol}.")
+            return {"peer_comparision": []}
+
+        for th in header_row.find_all("th"):
+            headers.append(th.get_text(strip=True))
+
+        if not headers:
+            print(f"No headers found for {stock_symbol}.")
+            return {"peer_comparision": []}
+
+        # Extract rows
+        rows = []
+        tbody = data_table.find("tbody")
+        if not tbody:
+            print(f"No tbody found for {stock_symbol}.")
+            return {"peer_comparision": []}
+
+        for tr in tbody.find_all("tr"):
+            cells = tr.find_all("td")
+            if len(cells) != len(headers):
+                print(f"Row mismatch for {stock_symbol}: {cells}")
+                continue
+
+            # Map headers to cell values
+            row_data = {
+                headers[idx]: cell.get_text(strip=True) 
+                for idx, cell in enumerate(cells)
+            }
+            rows.append(row_data)
+
+        if not rows:
+            print(f"No data rows found for {stock_symbol}.")
+            return {"peer_comparision": []}
+
+        return {"peer_comparision": rows}
+    except Exception as e:
+        print(f"Error parsing peer comparison table for {stock_symbol}: {str(e)}")
+        return {"peer_comparision": []}
+
 
 
 @app.post("/scrape-all-data")
@@ -208,6 +323,8 @@ async def scrape_shareholder_data(payload: StockList):
             shareholder_data = parse_shareholder_table(stock_symbol, soup)
             profit_loss_data = parse_profit_loss_table(stock_symbol, soup)
             balance_sheet_data = parse_balance_sheet_table(stock_symbol, soup)
+            quaterly_result_data = parse_quaterly_result_table(stock_symbol, soup)
+            peer_comparision_data = parse_peer_comparision_table(stock_symbol, soup)
             # if profit_loss_data:
             if details_data or shareholder_data:
                 combined_data = {
@@ -215,6 +332,8 @@ async def scrape_shareholder_data(payload: StockList):
                     **shareholder_data,
                     **profit_loss_data,
                     **balance_sheet_data,
+                    **quaterly_result_data,
+                    **peer_comparision_data,
                 }
                 stock_details_collection.insert_one(combined_data)
                 return {
