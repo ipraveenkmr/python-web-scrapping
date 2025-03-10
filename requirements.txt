@@ -1,0 +1,6 @@
+fastapi
+pydantic
+pymongo
+requests
+beautifulsoup4
+uvicorn
