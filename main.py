@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 MONGO_URI = "mongodb://localhost:27017"
 DATABASE_NAME = "scraping_db"
 STOCK_COLLECTION_NAME = "stocks"
-STOCK_DETAILS_COLLECTION = "stock_details"
+STOCK_DETAILS_COLLECTION = "updated_stock_details"
 
 # Connect to MongoDB
 client = MongoClient(MONGO_URI)
@@ -371,12 +371,12 @@ async def get_stock_symbols():
     """
     try:
         # Fetch all documents from the collection
-        stocks = stock_collection.find(
-            {}, {"_id": 0, "Symbol": 1}
+        stocks = stock_details_collection.find(
+            {}, {"_id": 0, "stock_symbol": 1}
         )  # Only fetch 'Symbol' field
 
         # Extract symbols
-        symbols = [stock["Symbol"] for stock in stocks if "Symbol" in stock]
+        symbols = [stock["stock_symbol"] for stock in stocks if "stock_symbol" in stock]
 
         if not symbols:
             raise HTTPException(status_code=404, detail="No stock symbols found.")
