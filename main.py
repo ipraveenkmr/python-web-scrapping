@@ -368,67 +368,57 @@ def cashflow_table(stock_symbol: str, soup: BeautifulSoup):
     except Exception as e:
         print(f"Error parsing peer comparison table for {stock_symbol}: {str(e)}")
         return {"cashflow_result": []}
-
+    
 
 def parse_peer_comparision_table(stock_symbol: str, soup: BeautifulSoup):
     try:
-        table_container = soup.find("div", id="peers-table-placeholder")
-        if not table_container:
-            print(f"[ERROR] No table placeholder found for {stock_symbol}.")
+        table = soup.find("section", id="peers")
+        if not table:
+            print(f"[{stock_symbol}] Peer comparison section not found.")
             return {"peer_comparision": []}
 
-        # Locate the actual table inside the placeholder
-        data_table = table_container.find("table", class_="data-table")
+        # Locate the data table inside the section
+        data_div = table.find("div", id="peers-table-placeholder")
+        if not data_div:
+            print(f"[{stock_symbol}] No table placeholder found.")
+            return {"peer_comparision": []}
+
+        data_table = data_div.find("table", class_="data-table text-nowrap striped mark-visited no-scroll-right")
         if not data_table:
-            print(f"[ERROR] No data table found for {stock_symbol}.")
+            print(f"[{stock_symbol}] No peer comparison data table found.")
             return {"peer_comparision": []}
 
-        # Extract headers (Look for the first row with <th> elements)
-        header_row = data_table.find(
-            "tr"
-        )  # Finds first <tr> (no <thead> in provided HTML)
-        if not header_row:
-            print(f"[ERROR] No header row found for {stock_symbol}.")
-            return {"peer_comparision": []}
-
-        headers = [th.get_text(strip=True) for th in header_row.find_all("th")]
+        # Extract headers
+        headers = [th.get_text(strip=True) for th in data_table.find("tr").find_all("th")]
         if not headers:
-            print(f"[ERROR] No headers found for {stock_symbol}.")
+            print(f"[{stock_symbol}] No headers found in peer comparison table.")
             return {"peer_comparision": []}
 
-        # Extract rows
+        # Extract data rows
         rows = []
         tbody = data_table.find("tbody")
         if not tbody:
-            print(f"[ERROR] No tbody found for {stock_symbol}.")
+            print(f"[{stock_symbol}] No tbody found in peer comparison table.")
             return {"peer_comparision": []}
 
         for tr in tbody.find_all("tr"):
             cells = tr.find_all("td")
 
-            # Ensure we only extract rows with valid data
-            if len(cells) == 0:
-                continue  # Skip empty rows
-
+            # Allow partial rows instead of skipping
             row_data = {
-                headers[i]: (cells[i].get_text(strip=True) if i < len(cells) else "N/A")
-                for i in range(len(headers))
+                headers[idx]: cell.get_text(strip=True) if idx < len(cells) else "N/A"
+                for idx in range(len(headers))
             }
-
             rows.append(row_data)
 
         if not rows:
-            print(
-                f"[WARNING] No data rows found in Peer Comparison for {stock_symbol}."
-            )
+            print(f"[{stock_symbol}] No data rows found in peer comparison table.")
             return {"peer_comparision": []}
 
         return {"peer_comparision": rows}
 
     except Exception as e:
-        print(
-            f"[EXCEPTION] Error parsing peer comparison table for {stock_symbol}: {str(e)}"
-        )
+        print(f"[{stock_symbol}] Error parsing peer comparison table: {str(e)}")
         return {"peer_comparision": []}
 
 
