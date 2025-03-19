@@ -334,7 +334,6 @@ async def scrape_shareholder_data(payload: StockList):
             balance_sheet_data = parse_balance_sheet_table(stock_symbol, soup)
             quaterly_result_data = parse_quaterly_result_table(stock_symbol, soup)
             peer_comparision_data = parse_peer_comparision_table(stock_symbol, soup)
-            # if profit_loss_data:
             if details_data or shareholder_data:
                 combined_data = {
                     **details_data,
@@ -342,7 +341,7 @@ async def scrape_shareholder_data(payload: StockList):
                     **profit_loss_data,
                     **balance_sheet_data,
                     **quaterly_result_data,
-                    # **peer_comparision_data,
+                    **peer_comparision_data,
                 }
                 stock_details_collection.insert_one(combined_data)
                 return {
