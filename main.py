@@ -10,13 +10,16 @@ from bs4 import BeautifulSoup
 MONGO_URI = "mongodb://localhost:27017"
 DATABASE_NAME = "scraping_db"
 STOCK_COLLECTION_NAME = "stocks"
-STOCK_DETAILS_COLLECTION = "updated_stock_details"
+STOCK_DETAILS_COLLECTION = "stock_details_19_03"
+# STOCK_DETAILS_COLLECTION = "updated_stock_details"
+EQUITY_LIST = "equity_list_nse"
 
 # Connect to MongoDB
 client = MongoClient(MONGO_URI)
 db = client[DATABASE_NAME]
 stock_collection = db[STOCK_COLLECTION_NAME]
 stock_details_collection = db[STOCK_DETAILS_COLLECTION]
+equity_list = db[EQUITY_LIST]
 
 # FastAPI app
 app = FastAPI()
@@ -250,68 +253,68 @@ def parse_quaterly_result_table(stock_symbol: str, soup: BeautifulSoup):
         return {"quarterly_result": []}
     
     
-# def parse_peer_comparision_table(stock_symbol: str, soup: BeautifulSoup):
-#     try:
-#         table = soup.find("section", id="peers")
-#         # table = soup.find("div", id="peers-table-placeholder")
-#         if not table:
-#             print(f"No table placeholder found for {stock_symbol}.")
-#             return {"peer_comparision": []}
+def parse_peer_comparision_table(stock_symbol: str, soup: BeautifulSoup):
+    try:
+        table = soup.find("section", id="peers")
+        # table = soup.find("div", id="peers-table-placeholder")
+        if not table:
+            print(f"No table placeholder found for {stock_symbol}.")
+            return {"peer_comparision": []}
 
-#         # Find the table within the placeholder
-#         data_table = table.find("table", class_="data-table")
-#         if not data_table:
-#             print(f"No data table found for {stock_symbol}.")
-#             return {"peer_comparision": []}
+        # Find the table within the placeholder
+        data_table = table.find("table", class_="data-table")
+        if not data_table:
+            print(f"No data table found for {stock_symbol}.")
+            return {"peer_comparision": []}
 
-#         # Extract headers
-#         # headers = []
-#         header_row = data_table.find("tr")
-#         if not header_row:
-#             print(f"No header row found for {stock_symbol}.")
-#             return {"peer_comparision": []}
+        # Extract headers
+        # headers = []
+        header_row = data_table.find("tr")
+        if not header_row:
+            print(f"No header row found for {stock_symbol}.")
+            return {"peer_comparision": []}
 
-#         # for th in header_row.find_all("th"):
-#         #     headers.append(th.get_text(strip=True))
-#         headers = [th.get_text(strip=True) for th in table.find_all("th")]
+        # for th in header_row.find_all("th"):
+        #     headers.append(th.get_text(strip=True))
+        headers = [th.get_text(strip=True) for th in table.find_all("th")]
 
-#         # if not headers:
-#         #     print(f"No headers found for {stock_symbol}.")
-#         #     return {"peer_comparision": []}
+        # if not headers:
+        #     print(f"No headers found for {stock_symbol}.")
+        #     return {"peer_comparision": []}
 
-#         # Extract rows
-#         rows = []
-#         # tbody = data_table.find("tbody")
-#         # if not tbody:
-#         #     print(f"No tbody found for {stock_symbol}.")
-#         #     return {"peer_comparision": []}
+        # Extract rows
+        rows = []
+        # tbody = data_table.find("tbody")
+        # if not tbody:
+        #     print(f"No tbody found for {stock_symbol}.")
+        #     return {"peer_comparision": []}
 
-#         # for tr in tbody.find_all("tr"):
-#         #     cells = tr.find_all("td")
-#         #     if len(cells) != len(headers):
-#         #         print(f"Row mismatch for {stock_symbol}: {cells}")
-#         #         continue
+        # for tr in tbody.find_all("tr"):
+        #     cells = tr.find_all("td")
+        #     if len(cells) != len(headers):
+        #         print(f"Row mismatch for {stock_symbol}: {cells}")
+        #         continue
 
-#         #     # Map headers to cell values
-#         #     row_data = {
-#         #         headers[idx]: cell.get_text(strip=True) 
-#         #         for idx, cell in enumerate(cells)
-#         #     }
-#         #     rows.append(row_data)
-#         for tr in table.find_all("tr")[1:]:  # Skip the header row
-#             cells = tr.find_all(["td", "th"])
-#             row_data = [cell.get_text(strip=True) for cell in cells]
-#             rows.append(dict(zip(headers, row_data)))       
+        #     # Map headers to cell values
+        #     row_data = {
+        #         headers[idx]: cell.get_text(strip=True) 
+        #         for idx, cell in enumerate(cells)
+        #     }
+        #     rows.append(row_data)
+        for tr in table.find_all("tr")[1:]:  # Skip the header row
+            cells = tr.find_all(["td", "th"])
+            row_data = [cell.get_text(strip=True) for cell in cells]
+            rows.append(dict(zip(headers, row_data)))       
         
 
-#         if not rows:
-#             print(f"No data rows found for {stock_symbol}.")
-#             return {"peer_comparision": []}
+        if not rows:
+            print(f"No data rows found for {stock_symbol}.")
+            return {"peer_comparision": []}
 
-#         return {"peer_comparision": rows}
-#     except Exception as e:
-#         print(f"Error parsing peer comparison table for {stock_symbol}: {str(e)}")
-#         return {"peer_comparision": []}
+        return {"peer_comparision": rows}
+    except Exception as e:
+        print(f"Error parsing peer comparison table for {stock_symbol}: {str(e)}")
+        return {"peer_comparision": []}
 
 
 
@@ -330,7 +333,7 @@ async def scrape_shareholder_data(payload: StockList):
             profit_loss_data = parse_profit_loss_table(stock_symbol, soup)
             balance_sheet_data = parse_balance_sheet_table(stock_symbol, soup)
             quaterly_result_data = parse_quaterly_result_table(stock_symbol, soup)
-            # peer_comparision_data = parse_peer_comparision_table(stock_symbol, soup)
+            peer_comparision_data = parse_peer_comparision_table(stock_symbol, soup)
             # if profit_loss_data:
             if details_data or shareholder_data:
                 combined_data = {
@@ -371,12 +374,12 @@ async def get_stock_symbols():
     """
     try:
         # Fetch all documents from the collection
-        stocks = stock_details_collection.find(
-            {}, {"_id": 0, "stock_symbol": 1}
+        stocks = equity_list.find(
+            {}, {"_id": 0, "SYMBOL": 1}
         )  # Only fetch 'Symbol' field
 
         # Extract symbols
-        symbols = [stock["stock_symbol"] for stock in stocks if "stock_symbol" in stock]
+        symbols = [stock["SYMBOL"] for stock in stocks if "SYMBOL" in stock]
 
         if not symbols:
             raise HTTPException(status_code=404, detail="No stock symbols found.")
@@ -396,11 +399,11 @@ async def get_stock_symbols():
     try:
         # Fetch documents starting from the 20th to the 200th (using skip and limit)
         stocks = (
-            stock_collection.find({}, {"_id": 0, "Symbol": 1}).skip(2000).limit(500)
+            equity_list.find({}, {"_id": 0, "SYMBOL": 1}).skip(2000).limit(500)
         )  # Skip 20 and limit to 180 records
 
         # Extract symbols
-        symbols = [stock["Symbol"] for stock in stocks if "Symbol" in stock]
+        symbols = [stock["SYMBOL"] for stock in stocks if "SYMBOL" in stock]
 
         if not symbols:
             raise HTTPException(status_code=404, detail="No stock symbols found.")
