@@ -5,6 +5,10 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 import requests
 from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # MongoDB Configuration
 MONGO_URI = "mongodb://localhost:27017"
@@ -422,56 +426,38 @@ def ratios_table(stock_symbol: str, soup: BeautifulSoup):
         print(f"Error parsing ratios table for {stock_symbol}: {str(e)}")
         return {"ratios_result": []}
 
-def parse_peer_comparison_table(stock_symbol: str, soup: BeautifulSoup):
+def parse_peer_comparison_table(stock_symbol: str, html_content: str):
     try:
-        # Locate the table using its class name
-        data_table = soup.find("table", class_="data-table text-nowrap striped mark-visited no-scroll-right")
+        soup = BeautifulSoup(html_content, "html.parser")
+        table = soup.find("section", id="peers")
+        
+        if not table:
+            print(f"No peers section found for {stock_symbol}.")
+            return {"peers": []}
+
+        data_table = table.find("table", class_="data-table")
         if not data_table:
             print(f"No data table found for {stock_symbol}.")
-            return {"peer_comparison": []}
+            return {"peers": []}
 
-        # Extract headers
-        headers = []
-        header_row = data_table.find("tr")
-        if not header_row:
-            print(f"No header row found for {stock_symbol}.")
-            return {"peer_comparison": []}
-
-        for th in header_row.find_all("th"):
-            # Extract column names
-            column_name = th.get_text(strip=True)
-            headers.append(column_name)
-
+        headers = [th.get_text(strip=True) for th in data_table.find_all("th")]
         if not headers:
             print(f"No headers found for {stock_symbol}.")
-            return {"peer_comparison": []}
+            return {"peers": []}
 
-        # Extract rows
         rows = []
-        tbody = data_table.find("tbody")
-        if not tbody:
-            print(f"No tbody found for {stock_symbol}.")
-            return {"peer_comparison": []}
-
-        for tr in tbody.find_all("tr"):
+        for tr in data_table.find("tbody").find_all("tr"):
             cells = tr.find_all("td")
             if len(cells) != len(headers):
-                print(f"Skipping row due to mismatch: {cells}")
+                print(f"Row mismatch for {stock_symbol}: {cells}")
                 continue
-
             row_data = {headers[idx]: cell.get_text(strip=True) for idx, cell in enumerate(cells)}
             rows.append(row_data)
 
-        if not rows:
-            print(f"No data rows found for {stock_symbol}.")
-            return {"peer_comparison": []}
-
-        return {"peer_comparison": rows}
-
+        return {"peers": rows}
     except Exception as e:
         print(f"Error parsing peer comparison table for {stock_symbol}: {str(e)}")
-        return {"peer_comparison": []}
-    
+        return {"peers": []}
     
 def scrape_annual_reports(url):
     """Scrape annual reports from the given URL."""
@@ -586,14 +572,35 @@ def scrape_concalls(url):
     
     return concalls
 
-@app.post("/scrape-stock-data")
+@app.post("/scrape-all-datas")
 async def scrape_shareholder_data(payload: StockList):
 
     stock_symbols = [
         symbol.strip().upper() for symbol in payload.stock_symbols.split(",")
     ]
 
-    async def scrape_and_save(stock_symbol):
+    def scrape_and_save(stock_symbol, driver):
+        peer_data = []
+
+        try:
+            url = f"https://www.screener.in/company/{stock_symbol}/consolidated/"
+            driver.get(url)
+            driver.refresh()
+            
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "peers"))
+            )
+            
+            html_content = driver.page_source
+            peer_data = parse_peer_comparison_table(stock_symbol, html_content)
+            
+            # stock_details_collection.insert_one(peer_data)
+
+        except Exception as e:
+            print(f"Error fetching peer data for {stock_symbol}: {str(e)}")
+        finally:
+            driver.quit()
+
         try:
             soup = fetch_page(f"https://www.screener.in/company/{stock_symbol}/")
             details_data = parse_ul_top_ratios(stock_symbol, soup)
@@ -604,13 +611,12 @@ async def scrape_shareholder_data(payload: StockList):
             shareholding_data = shareholding_table(stock_symbol, soup)
             cashflow_data = cashflow_table(stock_symbol, soup)
             ratios_data = ratios_table(stock_symbol, soup)
-            peer_comparision_data = parse_peer_comparison_table(stock_symbol, soup)
-            
+
             annual_reports_url = f"https://www.screener.in/company/{stock_symbol}/consolidated/"
             annual_reports_data = scrape_annual_reports(annual_reports_url)
             credit_ratings_data = scrape_credit_ratings(annual_reports_url)
             scrape_concalls_data = scrape_concalls(annual_reports_url)
-            
+
             if details_data or shareholder_data:
                 combined_data = {
                     **details_data,
@@ -618,10 +624,10 @@ async def scrape_shareholder_data(payload: StockList):
                     **profit_loss_data,
                     **balance_sheet_data,
                     **quaterly_result_data,
-                    **peer_comparision_data,
                     **shareholding_data,
                     **cashflow_data,
                     **ratios_data,
+                    **peer_data,
                     "annual_reports": annual_reports_data,
                     "credit_ratings": credit_ratings_data,
                     "scrape_concalls": scrape_concalls_data,
@@ -638,15 +644,18 @@ async def scrape_shareholder_data(payload: StockList):
         except Exception as e:
             return {"stock_symbol": stock_symbol, "error": str(e)}
 
-    results = []
-    for symbol in stock_symbols:
-        result = await scrape_and_save(symbol)
-        results.append(result)
-        await asyncio.sleep(
-            5
-        )  # Wait for 5 seconds before processing the next stock symbol
+    # ✅ Process all stocks concurrently
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")
+    driver = webdriver.Chrome(options=options)
+
+    try:
+        results = await asyncio.gather(*(scrape_and_save(symbol, driver) for symbol in stock_symbols))
+    finally:
+        driver.quit()
 
     return {"results": results}
+
 
 
 @app.get("/get-stock-symbols")
