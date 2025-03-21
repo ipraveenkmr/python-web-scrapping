@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 MONGO_URI = "mongodb://localhost:27017"
 DATABASE_NAME = "scraping_db"
 STOCK_COLLECTION_NAME = "stocks"
-STOCK_DETAILS_COLLECTION = "stock_details_19_03"
+STOCK_DETAILS_COLLECTION = "stock_details_21_03"
 # STOCK_DETAILS_COLLECTION = "updated_stock_details"
 EQUITY_LIST = "equity_list_nse"
 
@@ -370,58 +370,109 @@ def cashflow_table(stock_symbol: str, soup: BeautifulSoup):
         return {"cashflow_result": []}
     
 
-def parse_peer_comparision_table(stock_symbol: str, soup: BeautifulSoup):
+def ratios_table(stock_symbol: str, soup: BeautifulSoup):
     try:
-        table = soup.find("section", id="peers")
+        table = soup.find("section", id="ratios")
         if not table:
-            print(f"[{stock_symbol}] Peer comparison section not found.")
-            return {"peer_comparision": []}
+            print(f"No ratios section found for {stock_symbol}.")
+            return {"ratios_result": []}
 
-        # Locate the data table inside the section
-        data_div = table.find("div", id="peers-table-placeholder")
-        if not data_div:
-            print(f"[{stock_symbol}] No table placeholder found.")
-            return {"peer_comparision": []}
-
-        data_table = data_div.find("table", class_="data-table text-nowrap striped mark-visited no-scroll-right")
+        data_table = table.find("table", class_="data-table")
         if not data_table:
-            print(f"[{stock_symbol}] No peer comparison data table found.")
-            return {"peer_comparision": []}
+            print(f"No data table found for {stock_symbol}.")
+            return {"ratios_result": []}
 
         # Extract headers
-        headers = [th.get_text(strip=True) for th in data_table.find("tr").find_all("th")]
-        if not headers:
-            print(f"[{stock_symbol}] No headers found in peer comparison table.")
-            return {"peer_comparision": []}
+        headers = []
+        header_row = data_table.find("thead").find("tr")
+        if not header_row:
+            print(f"No header row found for {stock_symbol}.")
+            return {"ratios_result": []}
 
-        # Extract data rows
+        for th in header_row.find_all("th"):
+            headers.append(th.get_text(strip=True))
+
+        if not headers:
+            print(f"No headers found for {stock_symbol}.")
+            return {"ratios_result": []}
+
+        # Extract rows
         rows = []
         tbody = data_table.find("tbody")
         if not tbody:
-            print(f"[{stock_symbol}] No tbody found in peer comparison table.")
-            return {"peer_comparision": []}
+            print(f"No tbody found for {stock_symbol}.")
+            return {"ratios_result": []}
 
         for tr in tbody.find_all("tr"):
             cells = tr.find_all("td")
+            if len(cells) == 0:
+                continue
 
-            # Allow partial rows instead of skipping
-            row_data = {
-                headers[idx]: cell.get_text(strip=True) if idx < len(cells) else "N/A"
-                for idx in range(len(headers))
-            }
+            row_label = cells[0].get_text(strip=True)  # First cell is the ratio name
+            row_data = {headers[idx]: cell.get_text(strip=True) for idx, cell in enumerate(cells)}
+            row_data["Ratio Name"] = row_label  # Add the ratio name separately
             rows.append(row_data)
 
         if not rows:
-            print(f"[{stock_symbol}] No data rows found in peer comparison table.")
-            return {"peer_comparision": []}
+            print(f"No data rows found for {stock_symbol}.")
+            return {"ratios_result": []}
 
-        return {"peer_comparision": rows}
+        return {"ratios_result": rows}
+    except Exception as e:
+        print(f"Error parsing ratios table for {stock_symbol}: {str(e)}")
+        return {"ratios_result": []}
+
+def parse_peer_comparison_table(stock_symbol: str, soup: BeautifulSoup):
+    try:
+        # Locate the table using its class name
+        data_table = soup.find("table", class_="data-table text-nowrap striped mark-visited no-scroll-right")
+        if not data_table:
+            print(f"No data table found for {stock_symbol}.")
+            return {"peer_comparison": []}
+
+        # Extract headers
+        headers = []
+        header_row = data_table.find("tr")
+        if not header_row:
+            print(f"No header row found for {stock_symbol}.")
+            return {"peer_comparison": []}
+
+        for th in header_row.find_all("th"):
+            # Extract column names
+            column_name = th.get_text(strip=True)
+            headers.append(column_name)
+
+        if not headers:
+            print(f"No headers found for {stock_symbol}.")
+            return {"peer_comparison": []}
+
+        # Extract rows
+        rows = []
+        tbody = data_table.find("tbody")
+        if not tbody:
+            print(f"No tbody found for {stock_symbol}.")
+            return {"peer_comparison": []}
+
+        for tr in tbody.find_all("tr"):
+            cells = tr.find_all("td")
+            if len(cells) != len(headers):
+                print(f"Skipping row due to mismatch: {cells}")
+                continue
+
+            row_data = {headers[idx]: cell.get_text(strip=True) for idx, cell in enumerate(cells)}
+            rows.append(row_data)
+
+        if not rows:
+            print(f"No data rows found for {stock_symbol}.")
+            return {"peer_comparison": []}
+
+        return {"peer_comparison": rows}
 
     except Exception as e:
-        print(f"[{stock_symbol}] Error parsing peer comparison table: {str(e)}")
-        return {"peer_comparision": []}
-
-
+        print(f"Error parsing peer comparison table for {stock_symbol}: {str(e)}")
+        return {"peer_comparison": []}
+    
+    
 def scrape_annual_reports(url):
     """Scrape annual reports from the given URL."""
     try:
@@ -457,6 +508,84 @@ def scrape_annual_reports(url):
         return []
 
 
+def scrape_credit_ratings(url):
+    """Scrape credit ratings from the given URL."""
+    try:
+        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        if response.status_code != 200:
+            print(f"[ERROR] Failed to fetch {url} - Status Code: {response.status_code}")
+            return []
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        reports_section = soup.find("div", class_="documents credit-ratings flex-column")
+        if not reports_section:
+            print("[ERROR] No credit ratings section found.")
+            return []
+
+        report_links = []
+        for li in reports_section.find_all("li"):
+            a_tag = li.find("a")
+            date_tag = li.find("div", class_="ink-600 smaller")
+
+            if a_tag and a_tag.get("href") and date_tag:
+                report_links.append({
+                    "date": date_tag.text.strip(),
+                    "url": a_tag["href"]
+                })
+
+        return report_links
+
+    except Exception as e:
+        print(f"[EXCEPTION] {str(e)}")
+        return []
+    
+
+
+def scrape_concalls(url):
+    response = requests.get(url)
+    if response.status_code != 200:
+        print("Failed to retrieve the page")
+        return []
+    
+    soup = BeautifulSoup(response.text, 'html.parser')
+    concalls = []
+    
+    concall_section = soup.find('div', class_='documents concalls flex-column')
+    if not concall_section:
+        print("No concall section found")
+        return []
+    
+    for item in concall_section.find_all('li', class_='flex'):
+        date = item.find('div', class_='ink-600').text.strip()
+        
+        transcript = item.find('a', class_='concall-link', title="Raw Transcript")
+        transcript_url = transcript['href'] if transcript else None
+        
+        notes_button = item.find('button', class_='concall-link')
+        notes_url = notes_button['data-url'] if notes_button else None
+        
+        ppt = None
+        for link in item.find_all('a', class_='concall-link'):
+            if 'PPT' in link.text:
+                ppt = link['href']
+                break
+        
+        rec = None
+        for link in item.find_all('a', class_='concall-link'):
+            if 'mp3' in link['href']:
+                rec = link['href']
+                break
+        
+        concalls.append({
+            'date': date,
+            'transcript': transcript_url,
+            'notes': notes_url,
+            'ppt': ppt,
+            'rec': rec
+        })
+    
+    return concalls
+
 @app.post("/scrape-all-data")
 async def scrape_shareholder_data(payload: StockList):
 
@@ -472,12 +601,15 @@ async def scrape_shareholder_data(payload: StockList):
             profit_loss_data = parse_profit_loss_table(stock_symbol, soup)
             balance_sheet_data = parse_balance_sheet_table(stock_symbol, soup)
             quaterly_result_data = parse_quaterly_result_table(stock_symbol, soup)
-            peer_comparision_data = parse_peer_comparision_table(stock_symbol, soup)
             shareholding_data = shareholding_table(stock_symbol, soup)
             cashflow_data = cashflow_table(stock_symbol, soup)
+            ratios_data = ratios_table(stock_symbol, soup)
+            peer_comparision_data = parse_peer_comparison_table(stock_symbol, soup)
             
             annual_reports_url = f"https://www.screener.in/company/{stock_symbol}/consolidated/"
             annual_reports_data = scrape_annual_reports(annual_reports_url)
+            credit_ratings_data = scrape_credit_ratings(annual_reports_url)
+            scrape_concalls_data = scrape_concalls(annual_reports_url)
             
             if details_data or shareholder_data:
                 combined_data = {
@@ -489,7 +621,10 @@ async def scrape_shareholder_data(payload: StockList):
                     **peer_comparision_data,
                     **shareholding_data,
                     **cashflow_data,
+                    **ratios_data,
                     "annual_reports": annual_reports_data,
+                    "credit_ratings": credit_ratings_data,
+                    "scrape_concalls": scrape_concalls_data,
                 }
                 stock_details_collection.insert_one(combined_data)
                 return {
